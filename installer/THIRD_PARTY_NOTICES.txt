@@ -1,0 +1,31 @@
+Gerber Bear - third-party software included in this installer
+==============================================================
+
+Gerber Bear bundles the following software, unmodified. Each remains under its own
+licence; the licence texts are installed with each component (see the folders named
+below) and are available at the addresses given.
+
+Python 3.12 (embeddable)        PSF License                 python\LICENSE.txt
+                                https://www.python.org/
+PySide6 / Qt 6                  LGPL-3.0 (Qt for Python)    python\Lib\site-packages\PySide6
+                                Source: https://code.qt.io/  https://download.qt.io/official_releases/QtForPython/
+                                You may replace the bundled PySide6/Qt libraries with your own build.
+pydantic, keyring               MIT                         python\Lib\site-packages
+httpx, numpy                    BSD-3-Clause                python\Lib\site-packages
+trimesh                         MIT                         python\Lib\site-packages
+Eclipse Temurin JRE 21          GPL-2.0 with Classpath Exception
+                                https://adoptium.net/        app\tools\jre\legal
+Freerouting 1.9.0               GPL-3.0                     app\tools\freerouting-1.9.0.jar
+                                Source: https://github.com/freerouting/freerouting
+                                (run as a separate program; not linked into Gerber Bear)
+three.js                        MIT                         app\ai_pcb_designer\visualization\threejs\vendor\LICENSE
+Inter (font)                    SIL Open Font License 1.1   app\ai_pcb_designer\resources\fonts
+Roboto Mono (font)              Apache-2.0                  app\ai_pcb_designer\resources\fonts
+Lucide (icons)                  ISC                         app\ai_pcb_designer\resources\icons\LICENSE-lucide.txt
+
+Not included: KiCad (GPL-3.0, https://www.kicad.org) is installed separately and used
+as an external program. Board designs you create are yours.
+
+Online services used only when you enable/use them: your AI provider (Google Gemini,
+OpenAI or a local server) with your own key; the jlcsearch catalogue
+(https://jlcsearch.tscircuit.com) to look up JLCPCB part numbers for the BOM.

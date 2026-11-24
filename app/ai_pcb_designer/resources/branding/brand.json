@@ -1,0 +1,34 @@
+{
+  "name": "Gerber Bear",
+  "wordmark": [
+    "Gerber",
+    "Bear"
+  ],
+  "tagline": "AI-assisted PCB design, built on KiCad",
+  "logo_svg": "gerber_bear_logo.svg",
+  "icon": "gerber_bear.ico",
+  "colors": {
+    "bg": "#0A1020",
+    "bg2": "#0D1528",
+    "surface": "#0F172A",
+    "surface2": "#141F36",
+    "surface3": "#1A2742",
+    "border": "#1F2C47",
+    "border2": "#2A3B5E",
+    "text": "#E8EEF8",
+    "muted": "#8693AD",
+    "dim": "#5B6883",
+    "accent": "#06B6D4",
+    "accent2": "#22D3EE",
+    "gold": "#FFD700",
+    "gold2": "#F5C542",
+    "copper": "#D9822B",
+    "success": "#22C55E",
+    "warning": "#F59E0B",
+    "danger": "#EF4444"
+  },
+  "fonts": {
+    "ui": "Inter",
+    "mono": "Roboto Mono"
+  }
+}

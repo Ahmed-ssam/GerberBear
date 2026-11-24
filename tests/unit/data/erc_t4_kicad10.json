@@ -1,0 +1,100 @@
+{
+    "$schema": "https://schemas.kicad.org/erc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-11-23T21:22:46",
+    "ignored_checks": [
+        {
+            "description": "Global label only appears once in the schematic",
+            "key": "single_global_label"
+        },
+        {
+            "description": "Four connection points are joined together",
+            "key": "four_way_junction"
+        },
+        {
+            "description": "SPICE model issue",
+            "key": "simulation_model_issue"
+        },
+        {
+            "description": "Assigned footprint doesn't match footprint filters",
+            "key": "footprint_filter"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning",
+        "exclusion"
+    ],
+    "kicad_version": "10.0.8",
+    "sheets": [
+        {
+            "path": "/",
+            "uuid_path": "/771d1e36-287b-48c3-9e94-dc788a51d89b",
+            "violations": []
+        },
+        {
+            "path": "/Control/",
+            "uuid_path": "/771d1e36-287b-48c3-9e94-dc788a51d89b/e8dcc4f7-983b-494b-93c8-66374a05fe7e",
+            "violations": []
+        },
+        {
+            "path": "/Power/",
+            "uuid_path": "/771d1e36-287b-48c3-9e94-dc788a51d89b/c0183865-39eb-47ec-9409-b6f523feac12",
+            "violations": [
+                {
+                    "description": "Pins of type Power output and Power output are connected",
+                    "items": [
+                        {
+                            "description": "Symbol U3 Pin 5 [VOUT, Power output, Line]",
+                            "pos": {
+                                "x": 53.34,
+                                "y": 142.24
+                            },
+                            "uuid": "e638c990-3c79-42dd-98bd-143c2610cb7b"
+                        },
+                        {
+                            "description": "Symbol U5 Pin 4 [V3, Power output, Line]",
+                            "pos": {
+                                "x": 223.52,
+                                "y": 43.18
+                            },
+                            "uuid": "11a86570-dd60-4234-ab42-5d9a14797b3b"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_to_pin"
+                }
+            ]
+        },
+        {
+            "path": "/Sensors/",
+            "uuid_path": "/771d1e36-287b-48c3-9e94-dc788a51d89b/c46b60d5-a2c0-432e-b228-f08eff12caa7",
+            "violations": [
+                {
+                    "description": "Pins of type Bidirectional and Power output are connected",
+                    "items": [
+                        {
+                            "description": "Symbol U6 Pin 5 [SDO, Bidirectional, Line]",
+                            "pos": {
+                                "x": 53.34,
+                                "y": 50.8
+                            },
+                            "uuid": "6be056cc-0fdc-4cc1-896e-28a0f423aa2d"
+                        },
+                        {
+                            "description": "Symbol #FLG031 Pin 1 [Power output, Line]",
+                            "pos": {
+                                "x": 104.14,
+                                "y": 57.15
+                            },
+                            "uuid": "08a94a17-ee0f-48df-bcb8-4ea6be23efd6"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "pin_to_pin"
+                }
+            ]
+        }
+    ],
+    "source": "t4_usb_battery_node.kicad_sch"
+}

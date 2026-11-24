@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Schematic</title>
+<style>
+  html,body { margin:0; height:100%; background:#0A0F1B; color:#E7ECF4; overflow:hidden;
+              font:12px/1.4 Inter, "Segoe UI", system-ui, sans-serif; user-select:none; }
+  #stage { position:absolute; inset:0; cursor:grab; }
+  #page { position:absolute; left:0; top:0; transform-origin:0 0; background:#fff; box-shadow:0 4px 24px rgba(0,0,0,.5); }
+  #page img { display:block; width:100%; height:100%; }
+  .bar { position:absolute; top:10px; left:10px; display:flex; gap:4px; flex-wrap:wrap; background:#0F1626;
+         border:1px solid #1C2740; border-radius:10px; padding:5px; max-width:calc(100% - 40px); }
+  .bar button { background:transparent; color:#E7ECF4; border:1px solid transparent; border-radius:7px; padding:4px 9px;
+                font:inherit; cursor:pointer; }
+  .bar button:hover { border-color:#1C2740; } .bar button.on { color:#E7ECF4; background:#1B2640; }
+  #empty { position:absolute; inset:0; display:none; align-items:center; justify-content:center; color:#A3AEC2; font-size:14px; }
+</style>
+</head>
+<body>
+<div id="stage"><div id="page"><img id="img" draggable="false"></div></div>
+<div class="bar" id="bar"><button id="fit">Fit</button></div>
+<div id="empty">No schematic generated for this project yet.</div>
+<script>
+const pages = JSON.parse(new URLSearchParams(location.search).get('pages') || '[]');
+let S = 1, tx = 0, ty = 0, W = 1, H = 1, drag = null;
+const page = document.getElementById('page'), img = document.getElementById('img'), stage = document.getElementById('stage');
+function apply() { page.style.transform = `translate(${tx}px,${ty}px) scale(${S})`; page.style.width = W + 'px'; page.style.height = H + 'px'; }
+function fit() { S = Math.min((stage.clientWidth - 40) / W, (stage.clientHeight - 80) / H);
+  tx = (stage.clientWidth - W*S)/2; ty = 56 + (stage.clientHeight - 80 - H*S)/2; apply(); }
+function show(i) {
+  document.querySelectorAll('[data-i]').forEach(b => b.classList.toggle('on', +b.dataset.i === i));
+  img.onload = () => { W = img.naturalWidth || 1600; H = img.naturalHeight || 1100;
+    if (W < 1200) { const k = 1600 / W; W *= k; H *= k; } fit(); window.__ready = true; };
+  img.src = pages[i].url;
+}
+if (!pages.length) { document.getElementById('empty').style.display = 'flex'; window.__ready = true; }
+pages.forEach((p, i) => { const b = document.createElement('button'); b.textContent = p.name; b.dataset.i = i;
+  b.onclick = () => show(i); document.getElementById('bar').appendChild(b); });
+if (pages.length) show(0);
+document.getElementById('fit').onclick = fit;
+stage.addEventListener('mousedown', e => drag = [e.clientX, e.clientY, tx, ty]);
+window.addEventListener('mouseup', () => drag = null);
+window.addEventListener('mousemove', e => { if (drag) { tx = drag[2] + e.clientX - drag[0]; ty = drag[3] + e.clientY - drag[1]; apply(); } });
+stage.addEventListener('wheel', e => { e.preventDefault(); const k = Math.exp(-e.deltaY * 0.0015), ns = Math.max(.05, Math.min(20, S*k));
+  tx = e.clientX - (e.clientX - tx) * ns / S; ty = e.clientY - (e.clientY - ty) * ns / S; S = ns; apply(); }, { passive: false });
+window.addEventListener('resize', fit);
+</script>
+</body>
+</html>

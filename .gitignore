@@ -1,0 +1,14 @@
+# local environment and outputs
+.venv/
+reports/
+installer/build/
+installer/downloads/
+installer/output/
+__pycache__/
+*.pyc
+.pytest_cache/
+# KiCad backups/locks
+*.kicad_pcb-bak
+*.lck
+fp-info-cache
+logs/

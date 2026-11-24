@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>3D PCB Viewer</title>
+<style>
+  :root { --bg:#0A0F1B; --panel:#0F1626; --line:#1C2740; --text:#E7ECF4; --muted:#A3AEC2;
+          --cyan:#06B6D4; --copper:#D9822B; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--text);
+              font:12px/1.4 Inter, "Segoe UI", system-ui, sans-serif; overflow:hidden; }
+  #c { position:absolute; inset:0; }
+  .bar { position:absolute; top:12px; left:12px; display:flex; flex-wrap:wrap; gap:2px; max-width:calc(100% - 24px); background:var(--panel);
+         border:1px solid var(--line); border-radius:10px; padding:5px; }
+  .bar button { background:transparent; color:var(--muted); border:none; border-radius:7px;
+                padding:5px 10px; font:inherit; cursor:pointer; }
+  .bar button:hover { color:var(--text); } .bar button:active { transform:translateY(1px); }
+  .bar button.on { color:var(--text); background:#1B2640; }
+  .sep { width:1px; background:var(--line); margin:2px 4px; }
+  #info { position:absolute; bottom:10px; left:10px; color:var(--muted); font-family:"Roboto Mono", monospace; }
+  #warn { position:absolute; bottom:38px; left:12px; max-width:340px; background:rgba(15,22,38,.92);
+          border:1px solid rgba(217,130,43,.55); color:#f0c79e; border-radius:10px; padding:9px 12px; display:none;
+          backdrop-filter: blur(6px); opacity:0; transform:translateY(8px); transition:opacity .4s, transform .4s; }
+  #warn.show { opacity:1; transform:none; }
+  #c { opacity:0; transition: opacity .6s ease; }
+  .bar { animation: drop .5s ease both; }
+  @keyframes drop { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
+  .bar button { transition: color .15s, background .2s; }
+  #err { position:absolute; inset:0; display:none; align-items:center; justify-content:center; color:#f87171; }
+  .ea { display:flex; flex-direction:column; align-items:center; gap:18px; animation: eafade .6s ease both; }
+  .ea svg { width:220px; height:140px; overflow:visible; }
+  .ea .ol { fill:none; stroke:#2A3756; stroke-width:2; stroke-dasharray:640; stroke-dashoffset:640;
+            animation: eadraw 1.6s .2s cubic-bezier(.3,.7,.2,1) forwards; }
+  .ea .tr { fill:none; stroke:#2A3756; stroke-width:1.6; stroke-linecap:round; stroke-dasharray:160; stroke-dashoffset:160;
+            animation: eadraw 1.4s cubic-bezier(.3,.7,.2,1) forwards; }
+  .ea .pd { fill:#2A3756; opacity:0; animation: eapop .4s ease forwards; }
+  .ea .pulse { fill:#22D3EE; filter: drop-shadow(0 0 6px #22D3EE); }
+  .ea .t1 { color:#E7ECF4; font-size:15px; font-weight:600; }
+  .ea .t2 { color:#6B778D; font-size:13px; max-width:340px; line-height:1.5; }
+  @keyframes eadraw { to { stroke-dashoffset:0; } }
+  @keyframes eapop { to { opacity:1; } }
+  @keyframes eafade { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+</style>
+<script type="importmap">
+  { "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="bar">
+  <button data-view="iso" class="on">Iso</button>
+  <button data-view="top">Top</button>
+  <button data-view="bottom">Bottom</button>
+  <button data-view="front">Front</button>
+  <button data-view="back">Back</button>
+  <div class="sep"></div>
+  <button id="parts" class="on">Components</button>
+  <button id="bg">Background</button>
+  <button id="reset">Reset</button>
+</div>
+<div id="warn"></div>
+<div id="info"></div>
+<div id="err"></div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const params = new URLSearchParams(location.search);
+const modelUrl = params.get('model');
+const missing = (params.get('missing') || '').split(',').filter(Boolean);
+
+const canvas = document.getElementById('c');
+let renderer;
+try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true }); }
+catch (e) {
+  const el = document.getElementById('err');
+  el.innerHTML = '3D view unavailable: WebGL could not start on this machine.<br>Enable "Software 3D rendering" in Settings &gt; Viewer and restart.';
+  el.style.display = 'flex'; window.__ready = true; console.log('AIPCB:' + JSON.stringify({ webgl: false }));
+  throw e;
+}
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene();
+const bgs = [0x0A0F1B, 0x151E31, 0xe9edf2]; let bgi = 0;
+scene.background = new THREE.Color(bgs[0]);
+// image-based lighting: metal pins, solder and silkscreen read like the real thing
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 5000);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x1a2438, 0.6));
+const key = new THREE.DirectionalLight(0xfff4e6, 1.6); key.position.set(60, 120, 80); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0004; scene.add(key);
+const rim = new THREE.DirectionalLight(0x7dd3fc, 0.7); rim.position.set(-90, 40, -70); scene.add(rim);
+
+let root, center = new THREE.Vector3(), radius = 50, boardMesh = null;
+
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
+
+let anim = null;          // smooth camera moves between views
+function view(name, instant) {
+  const d = radius * (params.get('zoom') ? 2.6 / parseFloat(params.get('zoom')) : 2.6);
+  const dirs = { iso: [0.55, 0.75, 0.9], top: [0, 1, 0.0001], bottom: [0, -1, 0.0001],
+                 front: [0, 0.22, 1], back: [0, 0.22, -1] };
+  const to = center.clone().add(new THREE.Vector3(...dirs[name]).normalize().multiplyScalar(d));
+  const side = ['iso', 'front', 'back'].includes(name);
+  const up = new THREE.Vector3(0, side ? 1 : 0, side ? 0 : -1);
+  controls.target.copy(center);
+  if (instant || window.__shot) { camera.position.copy(to); camera.up.copy(up); controls.update(); }
+  else anim = { from: camera.position.clone(), to, upFrom: camera.up.clone(), up, t0: performance.now(), dur: 700 };
+  document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === name));
+}
+function stepAnim(now) {
+  if (!anim) return;
+  const k = Math.min(1, (now - anim.t0) / anim.dur), e = 1 - Math.pow(1 - k, 3);      // ease-out
+  camera.position.lerpVectors(anim.from, anim.to, e);
+  camera.up.lerpVectors(anim.upFrom, anim.up, e).normalize();
+  controls.update();
+  if (k >= 1) anim = null;
+}
+document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => view(b.dataset.view));
+document.getElementById('reset').onclick = () => view('iso');
+document.getElementById('bg').onclick = () => { bgi = (bgi + 1) % bgs.length; scene.background.set(bgs[bgi]); };
+document.getElementById('parts').onclick = (e) => {
+  const on = e.target.classList.toggle('on');
+  root?.traverse(o => { if (o.isMesh && o !== boardMesh) o.visible = on; });
+};
+
+function emptyArt(title, sub) {
+  const traces = [['M40 40 H95 L110 55 H160', .5], ['M40 100 H70 L85 85 H125 L140 70 H180', .75], ['M60 120 V95 L75 80', 1.0]];
+  const pads = [[40,40],[160,55],[40,100],[180,70],[60,120],[75,80]];
+  return `<div class="ea"><svg viewBox="0 0 220 140">
+    <rect class="ol" x="10" y="10" width="200" height="120" rx="10"/>
+    ${traces.map(([d, t]) => `<path class="tr" d="${d}" style="animation-delay:${t}s"/>`).join('')}
+    ${pads.map(([x, y], i) => `<circle class="pd" cx="${x}" cy="${y}" r="4" style="animation-delay:${1.1 + i * .08}s"/>`).join('')}
+    <circle class="pulse" r="2.6"><animateMotion dur="3.2s" begin="1.6s" repeatCount="indefinite"
+      path="M40 100 H70 L85 85 H125 L140 70 H180"/></circle>
+  </svg><div class="t1">${title}</div><div class="t2">${sub}</div></div>`;
+}
+
+if (missing.length) {
+  const w = document.getElementById('warn');
+  w.textContent = `No 3D model in the KiCad library for: ${missing.join(', ')}. ` +
+                  `These parts appear as bare footprints.`;
+  w.style.display = 'block';
+  setTimeout(() => w.classList.add('show'), 600);
+  setTimeout(() => w.classList.remove('show'), 9000);
+}
+
+if (!modelUrl) {
+  const e = document.getElementById('err');
+  e.innerHTML = emptyArt('No 3D model yet', 'A photo-real model of the finished board appears here after generation.');
+  e.style.color = '#A3AEC2'; document.querySelector('.bar').style.display = 'none';
+  e.style.display = 'flex'; canvas.style.opacity = 1;
+} else {
+  new GLTFLoader().load(modelUrl, (gltf) => {
+    root = gltf.scene; scene.add(root);
+    let meshes = 0, best = 0;
+    root.traverse(o => {
+      if (!o.isMesh) return;
+      meshes++;
+      // KiCad's GLB uses plain base colours (and leaves metallic at the glTF default of 1.0,
+      // which renders black without reflections); our STEP converter uses vertex colours.
+      const old = o.material, vc = !!o.geometry.getAttribute('color');
+      if (vc && !o.geometry.userData.lin) {          // vertex colours are display (sRGB) values too
+        const a = o.geometry.getAttribute('color'), t = new THREE.Color();
+        for (let i = 0; i < a.count; i++) { t.setRGB(a.getX(i), a.getY(i), a.getZ(i), THREE.SRGBColorSpace);
+                                            a.setXYZ(i, t.r, t.g, t.b); }
+        a.needsUpdate = true; o.geometry.userData.lin = true;
+      }
+      // KiCad writes display (sRGB) colours into glTF's linear baseColorFactor: convert back
+      const col = vc ? new THREE.Color(1, 1, 1) : (old && old.color ? old.color.clone().convertSRGBToLinear()
+                                                                   : new THREE.Color(0.5, 0.5, 0.5));
+      const hsl = {}; col.getHSL(hsl);
+      const metallic = !vc && hsl.s < 0.25 && hsl.l > 0.45;            // pins, pads, shields
+      const gold = !vc && hsl.h > 0.08 && hsl.h < 0.17 && hsl.s > 0.3 && hsl.l > 0.3;   // gold/copper finish
+      o.material = new THREE.MeshStandardMaterial({ color: col, vertexColors: vc,
+        metalness: metallic || gold ? 0.85 : 0.0, roughness: metallic || gold ? 0.32 : 0.62,
+        envMapIntensity: metallic || gold ? 1.0 : 0.55, side: THREE.DoubleSide });
+      // KiCad exports copper and solder mask as coplanar sheets: push bare copper (the board's
+      // own metallic layers) behind the mask so the board reads green with copper only at openings
+      if (old && old.metalness >= 0.99 && old.roughness < 0.5) {
+        o.material.polygonOffset = true; o.material.polygonOffsetFactor = 2; o.material.polygonOffsetUnits = 4;
+      }
+      o.castShadow = true; o.receiveShadow = true;
+      if (!o.geometry.getAttribute('normal')) o.geometry.computeVertexNormals();
+      const s = new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3());
+      if (s.x * s.z > best) { best = s.x * s.z; boardMesh = o; }   // board = largest footprint in XZ
+    });
+    const box = new THREE.Box3().setFromObject(root);
+    box.getCenter(center); radius = box.getSize(new THREE.Vector3()).length() / 2;
+    const size = box.getSize(new THREE.Vector3());
+    const mm = size.x < 2 ? 1000 : 1;            // KiCad's GLB is in metres, our STEP converter in mm
+    document.getElementById('info').textContent =
+      `${(size.x * mm).toFixed(1)} × ${(size.z * mm).toFixed(1)} mm`;
+    // light and shadow frame the board
+    key.position.copy(center).add(new THREE.Vector3(radius * 1.2, radius * 2.2, radius * 1.5));
+    key.target.position.copy(center); scene.add(key.target);
+    const sc = key.shadow.camera; sc.left = sc.bottom = -radius * 1.4; sc.right = sc.top = radius * 1.4;
+    sc.near = 0.1; sc.far = radius * 6; sc.updateProjectionMatrix();
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(radius * 8, radius * 8), new THREE.ShadowMaterial({ opacity: 0.35 }));
+    ground.rotation.x = -Math.PI / 2; ground.position.set(center.x, box.min.y - 0.05, center.z);
+    ground.receiveShadow = true; scene.add(ground);
+    // arrive with a short fly-in
+    const start = params.get('view') || 'iso';
+    if (!window.__shot && start === 'iso') {
+      camera.position.copy(center).add(new THREE.Vector3(0.2, 1.6, 2.4).normalize().multiplyScalar(radius * 4.2));
+      camera.up.set(0, 1, 0); controls.update();
+      view('iso');
+      anim.dur = 1100;
+    } else view(start, true);
+    canvas.style.opacity = 1;
+    window.__ready = true;
+  }, undefined, (err) => {
+    const e = document.getElementById('err'); e.textContent = 'Failed to load 3D model: ' + err.message;
+    e.style.display = 'flex'; window.__ready = true;
+  });
+}
+controls.addEventListener('start', () => { anim = null; });
+(function loop(now) { requestAnimationFrame(loop); stepAnim(now || 0); controls.update(); renderer.render(scene, camera); })();
+</script>
+</body>
+</html>

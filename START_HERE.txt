@@ -1,0 +1,10 @@
+Gerber Bear - source folder
+===========================
+
+Using the app: install it from the GitHub Releases page (GerberBear-Setup-x.y.z.exe).
+Running from this folder (developers): see CONTRIBUTING.md.
+
+  check_install.bat        set up .venv, check KiCad/Java/Freerouting, build 5 test boards
+  run_app.bat              start the app
+  run_benchmark.bat        measure the AI on 21 realistic requests
+  installer\build_installer.bat   build the Windows installer

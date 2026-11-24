@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>2D PCB Viewer</title>
+<style>
+  :root { --bg:#0A0F1B; --panel:#0F1626; --raised:#1B2640; --line:#1C2740; --line2:#2A3756; --text:#E7ECF4; --muted:#A3AEC2; --dim:#6B778D; --accent:#06B6D4; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--text); overflow:hidden;
+              font:12px/1.4 Inter, "Segoe UI", system-ui, sans-serif; user-select:none; }
+  #stage { position:absolute; inset:0; cursor:grab; }
+  #stage.drag { cursor:grabbing; }
+  #grid { position:absolute; inset:0; pointer-events:none; opacity:.0; }
+  #world { position:absolute; left:0; top:0; transform-origin:0 0; }
+  .layer { position:absolute; left:0; top:0; width:100%; height:100%;
+           -webkit-mask-size:100% 100%; mask-size:100% 100%; -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat; }
+  #board { position:absolute; left:0; top:0; background:#16181D; box-shadow:0 0 0 1px #2A3756; }
+  svg#overlay { position:absolute; left:0; top:0; overflow:visible; pointer-events:none; }
+  .bar { position:absolute; top:12px; left:12px; display:flex; flex-wrap:wrap; gap:2px; max-width:calc(100% - 24px);
+         background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:3px; }
+  .bar select { max-width:150px; }
+  .bar button, .bar select { background:transparent; color:var(--muted); border:none; border-radius:7px;
+         padding:5px 10px; font:inherit; cursor:pointer; transition:background .12s, color .12s; }
+  .bar select { background:var(--raised); color:var(--text); }
+  .bar button:hover { color:var(--text); }
+  .bar button:active { transform:translateY(1px); }
+  .bar button.on { color:var(--text); background:var(--raised); }
+  .sep { width:1px; background:var(--line); margin:4px 3px; }
+  #layers { position:absolute; top:56px; left:12px; width:190px; background:var(--panel); border:1px solid var(--line);
+            border-radius:10px; padding:10px 12px; display:none; }
+  #layers.open { display:block; }
+  #layers h4 { margin:0 0 6px; font-size:12px; font-weight:600; color:var(--muted); }
+  #layers label { display:flex; align-items:center; gap:8px; padding:2px 0; cursor:pointer; }
+  .sw { width:12px; height:12px; border-radius:2px; }
+  #status { position:absolute; bottom:10px; left:14px; color:var(--dim); font-family:"Roboto Mono", monospace; }
+  #empty { position:absolute; inset:0; display:none; align-items:center; justify-content:center; color:var(--muted);
+           font-size:14px; text-align:center; padding:40px; }
+  .ea { display:flex; flex-direction:column; align-items:center; gap:18px; animation: eafade .6s ease both; }
+  .ea svg { width:220px; height:140px; overflow:visible; }
+  .ea .ol { fill:none; stroke:#2A3756; stroke-width:2; stroke-dasharray:640; stroke-dashoffset:640;
+            animation: eadraw 1.6s .2s cubic-bezier(.3,.7,.2,1) forwards; }
+  .ea .tr { fill:none; stroke:#2A3756; stroke-width:1.6; stroke-linecap:round; stroke-dasharray:160; stroke-dashoffset:160;
+            animation: eadraw 1.4s cubic-bezier(.3,.7,.2,1) forwards; }
+  .ea .pd { fill:#2A3756; opacity:0; animation: eapop .4s ease forwards; }
+  .ea .pulse { fill:#22D3EE; filter: drop-shadow(0 0 6px #22D3EE); }
+  .ea .t1 { color:#E7ECF4; font-size:15px; font-weight:600; }
+  .ea .t2 { color:#6B778D; font-size:13px; max-width:340px; line-height:1.5; }
+  @keyframes eadraw { to { stroke-dashoffset:0; } }
+  @keyframes eapop { to { opacity:1; } }
+  @keyframes eafade { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="grid"></canvas><div id="world"><div id="board"></div></div></div>
+<div class="bar">
+  <button id="fit">Fit</button>
+  <button data-side="top" class="on">Top</button><button data-side="bottom">Bottom</button>
+  <div class="sep"></div>
+  <button id="gridbtn">Grid</button>
+  <select id="net"><option value="">Highlight net…</option></select>
+  <select id="find"><option value="">Find part…</option></select>
+  <div class="sep"></div>
+  <button id="layersbtn">Layers</button>
+</div>
+<div id="layers"><h4>Layers</h4><div id="layerlist"></div></div>
+<div id="status"></div>
+<div id="empty"></div>
+<script>
+const P = new URLSearchParams(location.search);
+document.getElementById('layersbtn').onclick = (e) => { const l = document.getElementById('layers');
+  l.classList.toggle('open'); e.currentTarget.classList.toggle('on', l.classList.contains('open')); };
+const base = P.get('base');           // URL of the revision's renders/layers/ folder
+const COLORS = { 'F.Cu':'#C9783A', 'B.Cu':'#1BA3BA', 'In1.Cu':'#22C55E', 'In2.Cu':'#A855F7', 'In3.Cu':'#EAB308',
+  'In4.Cu':'#EC4899', 'F.Mask':'#9CA3AF', 'B.Mask':'#6B7280', 'F.Silkscreen':'#F1F5F9', 'B.Silkscreen':'#CBD5E1',
+  'F.Fab':'#FFD700', 'Edge.Cuts':'#FFD700' };
+const DEFAULT_ON = { 'F.Cu':1, 'B.Cu':1, 'F.Silkscreen':1, 'Edge.Cuts':1 };
+const OPACITY = { 'F.Cu':.6, 'B.Cu':.42, 'In1.Cu':.45, 'In2.Cu':.45, 'F.Mask':.35, 'B.Mask':.35, 'F.Fab':.8 };
+let S = 6, tx = 20, ty = 20, side = 'top', data = null, layerEls = {}, sel = null, netSel = '', userView = false;
+const world = document.getElementById('world'), stage = document.getElementById('stage'), ov = {};
+function send(msg) { console.log('AIPCB:' + JSON.stringify(msg)); }
+function apply() {
+  const flip = side === 'bottom' ? `translate(${data.page_mm[0]*S}px,0) scale(-1,1)` : '';
+  world.style.transform = `translate(${tx}px,${ty}px) ${flip}`;
+  world.style.width = data.page_mm[0]*S + 'px'; world.style.height = data.page_mm[1]*S + 'px';
+  drawGrid(); drawOverlay();
+}
+function fit() {
+  const top = 64, pad = 24, w = stage.clientWidth - 2 * pad, h = stage.clientHeight - top - 40;
+  S = Math.max(0.5, Math.min(w / data.page_mm[0], h / data.page_mm[1]));
+  tx = pad + (w - data.page_mm[0]*S)/2; ty = top + (h - data.page_mm[1]*S)/2; apply();
+}
+function toMM(cx, cy) {         // screen -> board mm
+  let x = (cx - tx) / S, y = (cy - ty) / S;
+  if (side === 'bottom') x = data.page_mm[0] - x;
+  return [x - data.offset_mm[0], y - data.offset_mm[1]];
+}
+function drawGrid() {
+  const c = document.getElementById('grid'); c.width = stage.clientWidth; c.height = stage.clientHeight;
+  if (c.style.opacity !== '1') return;
+  const g = c.getContext('2d'); g.clearRect(0,0,c.width,c.height);
+  const step = S >= 8 ? 1 : 10, ox = tx + data.offset_mm[0]*S, oy = ty + data.offset_mm[1]*S;
+  for (let k = -400; k <= 400; k++) {
+    const x = ox + k*step*S, y = oy + k*step*S, major = (k*step) % 10 === 0;
+    g.strokeStyle = major ? 'rgba(148,163,184,.22)' : 'rgba(148,163,184,.08)';
+    if (x > 0 && x < c.width) { g.beginPath(); g.moveTo(x,0); g.lineTo(x,c.height); g.stroke(); }
+    if (y > 0 && y < c.height) { g.beginPath(); g.moveTo(0,y); g.lineTo(c.width,y); g.stroke(); }
+  }
+}
+function svgEl(tag, attrs) { const e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]); return e; }
+function drawOverlay() {
+  const o = ov.svg; o.innerHTML = '';
+  o.setAttribute('width', data.page_mm[0]*S); o.setAttribute('height', data.page_mm[1]*S);
+  o.setAttribute('viewBox', `0 0 ${data.page_mm[0]} ${data.page_mm[1]}`);
+  const [ox, oy] = data.offset_mm;
+  if (netSel) for (const f of data.footprints) for (const p of f.pad_geom) if (p.net === netSel)
+    o.appendChild(svgEl('rect', { x: p.x-p.w/2+ox, y: p.y-p.h/2+oy, width: p.w, height: p.h, fill: '#06B6D4',
+      'fill-opacity': .85, stroke: '#E0FFFF', 'stroke-width': .08 }));
+  if (sel) { const b = sel.bbox;
+    o.appendChild(svgEl('rect', { x: b[0]+ox-.3, y: b[1]+oy-.3, width: b[2]-b[0]+.6, height: b[3]-b[1]+.6, fill: 'none',
+      stroke: '#06B6D4', 'stroke-width': .25, 'stroke-dasharray': '.8 .4' })); }
+}
+function setSide(s) { side = s; document.querySelectorAll('[data-side]').forEach(b => b.classList.toggle('on', b.dataset.side === s));
+  for (const [l, e] of Object.entries(layerEls)) {
+    const front = l.startsWith('F.'), back = l.startsWith('B.');
+    e.style.zIndex = (side === 'top') ? (front ? 20 : back ? 5 : 10) : (back ? 20 : front ? 5 : 10);
+  } apply(); }
+function emptyArt(title, sub) {
+  const traces = [['M40 40 H95 L110 55 H160', .5], ['M40 100 H70 L85 85 H125 L140 70 H180', .75], ['M60 120 V95 L75 80', 1.0]];
+  const pads = [[40,40],[160,55],[40,100],[180,70],[60,120],[75,80]];
+  return `<div class="ea"><svg viewBox="0 0 220 140">
+    <rect class="ol" x="10" y="10" width="200" height="120" rx="10"/>
+    ${traces.map(([d, t]) => `<path class="tr" d="${d}" style="animation-delay:${t}s"/>`).join('')}
+    ${pads.map(([x, y], i) => `<circle class="pd" cx="${x}" cy="${y}" r="4" style="animation-delay:${1.1 + i * .08}s"/>`).join('')}
+    <circle class="pulse" r="2.6"><animateMotion dur="3.2s" begin="1.6s" repeatCount="indefinite"
+      path="M40 100 H70 L85 85 H125 L140 70 H180"/></circle>
+  </svg><div class="t1">${title}</div><div class="t2">${sub}</div></div>`;
+}
+async function init() {
+  if (!base) { const e = document.getElementById('empty');
+    e.innerHTML = emptyArt('No board yet', 'Describe the board in the conversation and approve the proposal. The routed PCB appears here.');
+    e.style.display = 'flex'; return; }
+  try {
+    const [man, brd] = await Promise.all([fetch(base + 'layers.json').then(r => r.json()), fetch(base + 'board.json').then(r => r.json())]);
+    data = brd;
+    const boardEl = document.getElementById('board');
+    boardEl.style.left = data.offset_mm[0]*100/data.page_mm[0] + '%'; boardEl.style.top = data.offset_mm[1]*100/data.page_mm[1] + '%';
+    boardEl.style.width = data.width_mm*100/data.page_mm[0] + '%'; boardEl.style.height = data.height_mm*100/data.page_mm[1] + '%';
+    const list = document.getElementById('layerlist');
+    for (const { layer, file } of man) {
+      const el = document.createElement('div'); el.className = 'layer';
+      const url = `url("${base}${file}")`;
+      el.style.webkitMaskImage = url; el.style.maskImage = url;
+      el.style.background = COLORS[layer] || '#ccc'; el.style.opacity = OPACITY[layer] || 1;
+      el.style.display = DEFAULT_ON[layer] ? 'block' : 'none';
+      world.appendChild(el); layerEls[layer] = el;
+      const lab = document.createElement('label');
+      lab.innerHTML = `<input type="checkbox" ${DEFAULT_ON[layer] ? 'checked' : ''}><span class="sw" style="background:${COLORS[layer]}"></span>${layer}`;
+      lab.querySelector('input').onchange = (ev) => { el.style.display = ev.target.checked ? 'block' : 'none'; };
+      list.appendChild(lab);
+    }
+    ov.svg = svgEl('svg', { id: 'overlay' }); world.appendChild(ov.svg); ov.svg.style.zIndex = 50;
+    const nets = new Set(); data.footprints.forEach(f => f.pad_geom.forEach(p => p.net && nets.add(p.net)));
+    const ns = document.getElementById('net'); [...nets].sort().forEach(n => ns.add(new Option(n, n)));
+    ns.onchange = () => { netSel = ns.value; drawOverlay(); send({ net: netSel }); };
+    const fs = document.getElementById('find');
+    data.footprints.map(f => f.ref).sort((a,b) => a.localeCompare(b, undefined, {numeric:true})).forEach(r => fs.add(new Option(r, r)));
+    fs.onchange = () => { const f = data.footprints.find(x => x.ref === fs.value); if (f) select(f, true); };
+    setSide('top'); fit();
+    document.getElementById('status').textContent = `${data.width_mm} × ${data.height_mm} mm · ${data.layers} layers · ${data.footprints.length} footprints`;
+    window.__ready = true; send({ ready: true });
+  } catch (err) {
+    const e = document.getElementById('empty'); e.textContent = 'Could not load the 2D view: ' + err; e.style.display = 'flex';
+    window.__ready = true;
+  }
+}
+function select(f, center) {
+  sel = f; drawOverlay(); send({ select: f ? f.ref : null });
+  if (f && center) { const cx = (f.bbox[0]+f.bbox[2])/2 + data.offset_mm[0], cy = (f.bbox[1]+f.bbox[3])/2 + data.offset_mm[1];
+    S = Math.max(S, 10); tx = stage.clientWidth/2 - (side === 'bottom' ? data.page_mm[0]-cx : cx)*S; ty = stage.clientHeight/2 - cy*S; apply(); }
+}
+window.highlightRef = (ref) => { const f = data && data.footprints.find(x => x.ref === ref); if (f) select(f, true); };
+window.highlightNet = (n) => { netSel = n || ''; document.getElementById('net').value = netSel; drawOverlay(); };
+let drag = null, moved = false;
+stage.addEventListener('mousedown', e => { drag = [e.clientX, e.clientY, tx, ty]; moved = false; stage.classList.add('drag'); });
+window.addEventListener('mouseup', e => {
+  stage.classList.remove('drag');
+  if (drag && !moved && data && e.target.closest('#stage')) {
+    const [x, y] = toMM(e.clientX, e.clientY);
+    const hits = data.footprints.filter(f => x >= f.bbox[0] && x <= f.bbox[2] && y >= f.bbox[1] && y <= f.bbox[3]
+                                          && (side === 'top' ? f.layer === 'F.Cu' : true))
+      .sort((a, b) => (a.bbox[2]-a.bbox[0])*(a.bbox[3]-a.bbox[1]) - (b.bbox[2]-b.bbox[0])*(b.bbox[3]-b.bbox[1]));
+    select(hits[0] || null, false);
+  }
+  drag = null;
+});
+window.addEventListener('mousemove', e => {
+  if (data) { const [x, y] = toMM(e.clientX, e.clientY);
+    document.getElementById('status').textContent = `X ${x.toFixed(2)}  Y ${y.toFixed(2)} mm · ${data.width_mm} × ${data.height_mm} mm · ${data.layers} layers`; }
+  if (!drag) return; const dx = e.clientX - drag[0], dy = e.clientY - drag[1];
+  if (Math.abs(dx) + Math.abs(dy) > 3) { moved = true; userView = true; } tx = drag[2] + dx; ty = drag[3] + dy; apply();
+});
+stage.addEventListener('wheel', e => { e.preventDefault(); userView = true; const k = Math.exp(-e.deltaY * 0.0015);
+  const ns = Math.max(0.5, Math.min(120, S * k)); tx = e.clientX - (e.clientX - tx) * ns / S; ty = e.clientY - (e.clientY - ty) * ns / S; S = ns; apply(); }, { passive: false });
+document.getElementById('fit').onclick = fit;
+document.querySelectorAll('[data-side]').forEach(b => b.onclick = () => setSide(b.dataset.side));
+document.getElementById('gridbtn').onclick = (e) => { const g = document.getElementById('grid'); const on = g.style.opacity !== '1';
+  g.style.opacity = on ? '1' : '0'; e.target.classList.toggle('on', on); drawGrid(); };
+window.addEventListener('resize', () => { if (!data) return; if (userView) apply(); else fit(); });
+document.getElementById('fit').addEventListener('click', () => { userView = false; });
+init();
+</script>
+</body>
+</html>
