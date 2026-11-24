@@ -437,7 +437,7 @@ class MainWindow(QMainWindow):
         stop = {"a", "an", "the", "i", "want", "need", "board", "that", "with", "for", "and", "to", "of", "at", "my"}
         name = " ".join(w for w in words if w.lower() not in stop)[:40].strip().capitalize() or "New board"
         p = self.pm.create(name)
-        self.open_project(p.id)
+        self.open_project(p.id, welcome=False)
         self.on_send(text)
 
     def open_example(self, key: str):
@@ -454,7 +454,7 @@ class MainWindow(QMainWindow):
         job.signals.failed.connect(lambda m, t: (self.chat.set_busy(False), self._error(m)))
         self.jobs.start(job)
 
-    def open_project(self, pid: str):
+    def open_project(self, pid: str, welcome: bool = True):
         try:
             prov, text = self._provider()
             self.session = ProjectSession(self.pm, pid, prov, self._pipeline(), self.libs)
@@ -463,9 +463,10 @@ class MainWindow(QMainWindow):
             return
         self.chat.set_provider(text if prov else "", bool(prov and prov.simulated), prov is not None)
         self.chat.clear()
+        self.chat.set_busy(False)
         self.chat.setVisible(True)
         hist = self.session.history()
-        if not hist:
+        if not hist and welcome:
             self.chat.add_welcome(CHAT_EXAMPLES)
         last_prop = max((i for i, m in enumerate(hist) if m["kind"] == "proposal"), default=-1)
         for i, m in enumerate(hist):
@@ -522,9 +523,13 @@ class MainWindow(QMainWindow):
         self.chat.add_item("user", "text", text)
         self.chat.set_busy(True)
         self.chat.disable_proposal_buttons()
-        job = Job("ai turn", self.session.user_message, text)
-        job.signals.finished.connect(self._turn_done)
-        job.signals.failed.connect(lambda m, t: (self.chat.set_busy(False), self._error(m)))
+        sess = self.session
+        job = Job("ai turn", sess.user_message, text)
+        # The reply belongs to the board it was asked on: if the user has opened another board
+        # meanwhile, it is saved there (by the session) but not shown in the current chat.
+        job.signals.finished.connect(lambda r: self._turn_done(r) if self.session is sess else None)
+        job.signals.failed.connect(lambda m, t: (self.chat.set_busy(False), self._error(m))
+                                   if self.session is sess else None)
         self.jobs.start(job)
 
     def _turn_done(self, res):
@@ -647,9 +652,13 @@ class MainWindow(QMainWindow):
         s = self.session
         rev = s.current_revision() if s else None
         if not rev:
+            QMessageBox.information(self, "Open in KiCad", "Open a board that has been built first: its KiCad "
+                                    "project opens in KiCad.")
             return
         pro = rev.dir / f"{rev.circuit_name}.kicad_pro"
-        exe = shutil.which("kicad") or (str(Path(self.caps.cli_path).with_name("kicad")) if self.caps and self.caps.cli_path else None)
+        name = "kicad.exe" if sys.platform == "win32" else "kicad"
+        exe = shutil.which("kicad") or (str(Path(self.caps.cli_path).with_name(name))
+                                        if self.caps and self.caps.cli_path else None)
         if not pro.exists() or not exe or not Path(exe).exists():
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(rev.dir)))
             return

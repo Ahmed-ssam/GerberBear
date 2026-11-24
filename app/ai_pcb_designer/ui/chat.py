@@ -210,6 +210,7 @@ class ChatPanel(QWidget):
                 w.deleteLater()
         self.progress_card = None
         self._proposal_buttons = ()
+        self._welcome = None
 
     def _row(self, w: QWidget, who: str):
         row = QWidget()
@@ -243,8 +244,18 @@ class ChatPanel(QWidget):
             l.addWidget(_text(text))
             self._row(f, "ai")
         elif role == "user":
+            self._drop_welcome()
             f, l = _block("userMsg", (14, 10, 14, 11))
-            l.addWidget(_text(html.escape(text).replace("\n", "<br>"), md=False))
+            lab = _text(html.escape(text).replace("\n", "<br>"), md=False)
+            # Right-aligned bubble: it sits next to a stretch, so it needs a real width of its own
+            # (an "Ignored" label would collapse to nothing). Size it to the longest line, capped.
+            lab.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+            maxw = max(240, int(self.width() * 0.82))
+            lab.ensurePolished()
+            fm = lab.fontMetrics()
+            longest = max((fm.horizontalAdvance(t) for t in text.splitlines() or [""]), default=0)
+            lab.setMinimumWidth(min(longest + 10, maxw - 28))
+            l.addWidget(lab)
             self._row(f, "user")
         else:
             w = _text(text, color=None)
@@ -266,7 +277,18 @@ class ChatPanel(QWidget):
             b.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
             b.clicked.connect(lambda _=False, t=ex: (self.input.setPlainText(t), self.input.setFocus()))
             v.addWidget(b)
-        self._row(w, "ai")
+        self._welcome = self._row(w, "ai")
+
+    def _drop_welcome(self):
+        """The example prompts only help an empty chat; remove them once the user writes."""
+        w = getattr(self, "_welcome", None)
+        self._welcome = None
+        if w is not None:
+            try:
+                w.hide()
+                w.deleteLater()
+            except RuntimeError:
+                pass
 
     # ------------------------------------------------------------------ cards
     def _proposal_card(self, p: dict, interactive: bool) -> QFrame:

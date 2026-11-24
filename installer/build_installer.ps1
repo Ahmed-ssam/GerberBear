@@ -42,7 +42,7 @@ if (-not (Test-Path $jreZip)) {
 }
 
 Write-Host "Copying the app..."
-robocopy "$root\app" "$build\app" /E /XD __pycache__ .pytest_cache /XF *.pyc /NFL /NDL /NJH /NJS | Out-Null
+robocopy "$root\app" "$build\app" /E /XD __pycache__ .pytest_cache logs /XF *.pyc /NFL /NDL /NJH /NJS | Out-Null
 # GitHub repository (owner/name) for the About box, "Report a problem" and update checks
 $remote = (git -C $root config --get remote.origin.url) 2>$null
 if ($remote -match 'github\.com[:/]([^/]+/[^/.]+)') {
@@ -62,4 +62,4 @@ if (-not (Test-Path $iscc)) { throw "Inno Setup 6 (ISCC.exe) not found" }
 & $iscc "/DAppVersion=$Version" "GerberBear.iss"
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
 Write-Host ""
-Write-Host "Done: $here\output\GerberBear-Setup-$Version.exe"
+Write-Host "Done: $here\output\GerberBear-Setup.exe  (version $Version)"

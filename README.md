@@ -2,6 +2,15 @@
 
 **Describe a circuit board in plain language - get a real, checked KiCad project and the files to order it.**
 
+<p align="center">
+  <a href="https://github.com/Ahmed-ssam/GerberBear/releases/latest/download/GerberBear-Setup.exe">
+    <img src="https://img.shields.io/badge/Download%20for%20Windows-GerberBear--Setup.exe-F5C518?style=for-the-badge&logo=windows&logoColor=black&labelColor=0E1525" alt="Download Gerber Bear for Windows">
+  </a>
+  <br>
+  <sub>Free · Windows 10/11 (64-bit) · needs <a href="https://www.kicad.org/download/windows/">KiCad 8, 9 or 10</a> ·
+  <a href="https://github.com/Ahmed-ssam/GerberBear/releases">all versions</a></sub>
+</p>
+
 Gerber Bear is a free Windows desktop app that turns a conversation into a printed-circuit-board
 design. You say what the board should do; an AI engineer asks for anything that is missing
 (it never guesses voltages or currents), proposes an architecture you approve, and the app then
@@ -30,7 +39,8 @@ declined on purpose. Full list: [WHAT_IT_CAN_DESIGN.md](WHAT_IT_CAN_DESIGN.md).
 
 ## Install
 1. Install **KiCad 8, 9 or 10** (free): <https://www.kicad.org/download/windows/> - default options.
-2. Download **GerberBear-Setup-x.y.z.exe** from [Releases](../../releases) and run it.
+2. Download **[GerberBear-Setup.exe](https://github.com/Ahmed-ssam/GerberBear/releases/latest/download/GerberBear-Setup.exe)**
+   (latest version) and run it. Leave "Create a desktop shortcut" ticked to get a desktop icon.
    Windows may show "Windows protected your PC" because the installer is not code-signed:
    click **More info -> Run anyway**.
 3. Start Gerber Bear. The welcome screen checks KiCad and asks for an **AI key**: a free Google
